@@ -1,10 +1,9 @@
 from dotenv import load_dotenv
 from pydantic import BaseModel
-from langchain_openai import ChatOpenAI
-from langchain_anthropic import ChatAnthropic
+from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import PydanticOutputParser
-from langchain.agents import create_tool_calling_agent, AgentExecutor
+from langgraph.prebuilt import create_react_agent
 
 
 load_dotenv()
@@ -16,8 +15,7 @@ class BlogPostResponse(BaseModel):
     tools_used: list[str]
 
 
-llm = ChatOpenAI(model="gpt-3.5-turbo", temperature=0.7)
-llm_anthropic = ChatAnthropic(model="claude-2", temperature=0.7)
+llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0.7)
 
 parser = PydanticOutputParser(pydantic_object=BlogPostResponse)
 
@@ -27,19 +25,22 @@ prompt = ChatPromptTemplate.from_messages([
     "The provided information should be accurate and relevant to the topic."
     "Blog has to be in markdown format."
     "Wrap the output in this format and provide no other text\n{format_instructions}"),
-    ("human", "{topic}"),
-    ("placeholder","{chat_history}"),
-    ("placeholder","{agent_scratchpad}")
-]).partial_format(format_instructions=parser.get_format_instructions())
+    ("placeholder", "{messages}"),
+]).partial(format_instructions=parser.get_format_instructions())
 
+agent = create_react_agent(
+    model=llm,
+    prompt=prompt,
+    tools=[]
+)
 
-agent = create_tool_calling_agent(
-    llm = llm, 
-    tools = [], 
-    prompt = prompt)
-
-agent_executor = AgentExecutor(agent=agent, tools=[], verbose=True)
-raw_response = agent_executor.invoke({"topic": "The impact of AI on cybersecurity in 2024"})
+raw_response = agent.invoke({"messages": [{"role": "user", "content": "The impact of AI on cybersecurity in 2024"}]})
 
 print(raw_response)
 
+
+
+try:
+    structured_response = parser.parse(raw_response["messages"][-1].content)
+except Exception as e:
+    print(f"Error parsing response:",e ," Raw response:" , raw_response)
