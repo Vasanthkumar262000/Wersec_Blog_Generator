@@ -504,7 +504,10 @@ if whatsapp_btn and st.session_state["blog_ready"]:
     r = st.session_state["blog_result"]
     with st.spinner("Sending to WhatsApp…"):
         ok = send_whatsapp(r.topic, r.summary, r.sources)
-    st.success("Sent to WhatsApp.") if ok else st.error("WhatsApp failed — check Twilio credentials in .env")
+    if ok:
+        st.success("Sent to WhatsApp.")
+    else:
+        st.error("WhatsApp failed — check Twilio credentials in .env")
 
 
 # ── LinkedIn handler ──────────────────────────────────────────────────────────
@@ -512,4 +515,7 @@ if linkedin_btn and st.session_state["blog_ready"]:
     r = st.session_state["blog_result"]
     with st.spinner("Posting to LinkedIn…"):
         ok = post_to_linkedin(r.topic, r.full_content, r.summary)
-    st.success("Posted to LinkedIn.") if ok else st.error("LinkedIn failed — token may be expired (regenerate every 60 days)")
+    if ok:
+        st.success("Posted to LinkedIn.")
+    else:
+        st.error("LinkedIn failed — token may be expired (regenerate every 60 days)")

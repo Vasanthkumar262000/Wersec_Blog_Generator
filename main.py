@@ -1,4 +1,5 @@
 import re
+import time
 import pathlib
 from dotenv import load_dotenv
 from pydantic import BaseModel
@@ -22,6 +23,66 @@ def _slug(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
 
 
+def _make_llm() -> ChatGroq:
+    return ChatGroq(model="llama-3.3-70b-versatile", temperature=0.3)
+
+
+def _research(topic: str, llm: ChatGroq, retries: int = 2) -> str:
+    """Run research agent with retry. Returns research text or fallback."""
+    agent = create_react_agent(model=llm, tools=[search_tool])
+    for attempt in range(retries):
+        try:
+            result = agent.invoke({"messages": [
+                {"role": "user", "content": (
+                    f"Research this cybersecurity topic: {topic}. "
+                    "Use DuckDuckGo to find recent news, statistics, and key facts. "
+                    "Summarize what you find."
+                )}
+            ]})
+            return result["messages"][-1].content
+        except Exception as e:
+            err = str(e)
+            if "403" in err or "429" in err or "rate" in err.lower():
+                wait = 5 * (attempt + 1)
+                print(f"Groq rate limit / access error (attempt {attempt+1}). Waiting {wait}s...")
+                time.sleep(wait)
+            else:
+                print(f"Research failed: {e}")
+                break
+    return f"General knowledge about: {topic}"
+
+
+def _write_blog(topic: str, tone: str, word_count: str, research: str, llm: ChatGroq, retries: int = 3) -> BlogPostResponse:
+    """Write structured blog with retry on rate limits."""
+    writer = llm.with_structured_output(BlogPostResponse)
+    system = (
+        f"You are a cybersecurity content writer for the Wersec team. "
+        f"Write a LinkedIn blog post. Tone: {tone}. Length: {word_count}. "
+        "Write the full blog post in markdown in the full_content field. "
+        "Summary must be 2-3 sentences. List actual sources. List tools used."
+    )
+    human = f"Topic: {topic}\n\nResearch:\n{research}"
+
+    for attempt in range(retries):
+        try:
+            return writer.invoke([SystemMessage(content=system), HumanMessage(content=human)])
+        except Exception as e:
+            err = str(e)
+            if "403" in err or "429" in err or "rate" in err.lower():
+                wait = 10 * (attempt + 1)
+                print(f"Groq rate limit / access error (attempt {attempt+1}). Waiting {wait}s...")
+                time.sleep(wait)
+            else:
+                raise
+    raise RuntimeError(
+        "Groq API returned 403 Access Denied after retries. "
+        "This is usually caused by:\n"
+        "  1. VPN or firewall blocking Groq\n"
+        "  2. Groq rate limit — wait a minute and try again\n"
+        "  3. Check status.groq.com"
+    )
+
+
 def generate_blog(topic: str, tone: str = "professional", length: str = "medium") -> BlogPostResponse:
     length_map = {
         "short": "300-500 words",
@@ -29,39 +90,11 @@ def generate_blog(topic: str, tone: str = "professional", length: str = "medium"
         "long": "1000-1400 words",
     }
     word_count = length_map.get(length.lower(), "600-900 words")
+    llm = _make_llm()
 
-    llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0.3)
+    research = _research(topic, llm)
+    result = _write_blog(topic, tone, word_count, research, llm)
 
-    # Step 1: Research agent — searches the web and returns findings
-    research_agent = create_react_agent(model=llm, tools=[search_tool])
-    research_result = research_agent.invoke({"messages": [
-        {"role": "user", "content": (
-            f"Research this cybersecurity topic thoroughly: {topic}. "
-            "Use DuckDuckGo to find recent news, statistics, expert opinions, and key facts. "
-            "Summarize everything you find in detail."
-        )}
-    ]})
-    research_content = research_result["messages"][-1].content
-
-    # Step 2: Structured writer — uses research to write the blog post
-    writer_llm = llm.with_structured_output(BlogPostResponse)
-    result = writer_llm.invoke([
-        SystemMessage(content=(
-            f"You are a cybersecurity content writer for the Wersec team. "
-            f"Write a LinkedIn blog post with tone: {tone}, length: {word_count}. "
-            "Use the research provided to write an accurate and engaging post. "
-            "The full_content field must contain the complete blog post in markdown format. "
-            "The summary field must be 2-3 sentences. "
-            "List the actual sources found during research. "
-            "List the tools used during research."
-        )),
-        HumanMessage(content=(
-            f"Topic: {topic}\n\n"
-            f"Research findings:\n{research_content}"
-        )),
-    ])
-
-    # Save blog as markdown file
     pathlib.Path("outputs").mkdir(exist_ok=True)
     filepath = pathlib.Path("outputs") / f"{_slug(result.topic)}.md"
     filepath.write_text(result.full_content, encoding="utf-8")

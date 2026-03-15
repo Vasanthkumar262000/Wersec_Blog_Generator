@@ -8,32 +8,28 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
-def _slug(text: str) -> str:
-    return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
-
-
 def generate_thumbnail(topic: str, slug: str) -> str | None:
     """
-    Generate a cybersecurity-themed thumbnail using Together AI (FLUX.1-schnell-Free).
-    Falls back to Hugging Face if Together AI fails.
-    Returns the local file path to the saved PNG, or None on failure.
+    Generate a cybersecurity-themed thumbnail.
+    Tries in order: Together AI → Hugging Face (free).
+    Returns local file path or None on failure.
     """
     pathlib.Path("outputs").mkdir(exist_ok=True)
     output_path = str(pathlib.Path("outputs") / f"{slug}_thumbnail.png")
 
     prompt = (
-        f"Cybersecurity themed professional blog thumbnail for: {topic}. "
+        f"Cybersecurity professional blog thumbnail, topic: {topic}. "
         "Dark background, neon blue and green accents, digital network patterns, "
-        "shield icons, futuristic style, high quality, no text."
+        "shield and lock icons, futuristic style, high quality, no text, no watermark."
     )
 
-    # Primary: Together AI
+    # Option 1: Together AI (requires credits at api.together.ai)
     together_key = os.getenv("TOGETHER_API_KEY")
     if together_key:
         try:
-            import together
-            together.api_key = together_key
-            response = together.Images.create(
+            from together import Together
+            client = Together(api_key=together_key)
+            response = client.images.generate(
                 prompt=prompt,
                 model="black-forest-labs/FLUX.1-schnell-Free",
                 width=1024,
@@ -41,7 +37,6 @@ def generate_thumbnail(topic: str, slug: str) -> str | None:
                 steps=4,
                 n=1,
             )
-            # Handle both URL and base64 response formats
             img_data = response.data[0]
             if hasattr(img_data, "b64_json") and img_data.b64_json:
                 with open(output_path, "wb") as f:
@@ -53,20 +48,30 @@ def generate_thumbnail(topic: str, slug: str) -> str | None:
                     f.write(img_bytes)
                 return output_path
         except Exception as e:
-            print(f"Together AI image generation failed: {e}. Trying fallback...")
+            print(f"Together AI failed: {e}. Trying Hugging Face...")
 
-    # Fallback: Hugging Face Inference API
+    # Option 2: Hugging Face Inference API (free with HF token)
     hf_token = os.getenv("HUGGINGFACE_API_TOKEN")
-    if hf_token:
+    headers = {"Authorization": f"Bearer {hf_token}"} if hf_token else {}
+    hf_models = [
+        "stabilityai/stable-diffusion-xl-base-1.0",
+        "runwayml/stable-diffusion-v1-5",
+    ]
+    for model in hf_models:
         try:
-            api_url = "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0"
-            headers = {"Authorization": f"Bearer {hf_token}"}
-            response = requests.post(api_url, headers=headers, json={"inputs": prompt}, timeout=60)
-            if response.status_code == 200:
+            url = f"https://api-inference.huggingface.co/models/{model}"
+            response = requests.post(
+                url, headers=headers,
+                json={"inputs": prompt},
+                timeout=90,
+            )
+            if response.status_code == 200 and "image" in response.headers.get("content-type", ""):
                 with open(output_path, "wb") as f:
                     f.write(response.content)
+                print(f"Thumbnail generated via {model}")
                 return output_path
         except Exception as e:
-            print(f"Hugging Face image generation failed: {e}")
+            print(f"HuggingFace {model} failed: {e}")
 
+    print("All thumbnail providers failed. Add HUGGINGFACE_API_TOKEN to .env for free image generation.")
     return None
