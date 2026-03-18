@@ -8,7 +8,6 @@ from tools.linkedin_tool import post_to_linkedin
 # ── Page config ───────────────────────────────────────────────────────────────
 st.set_page_config(
     page_title="Wersec Blog Generator",
-    page_icon="🔐",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -473,13 +472,25 @@ else:
         st.markdown(f'<p style="font-size:0.875rem; color:#a1a1aa; line-height:1.6; margin:0">{result.summary}</p>', unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
 
+        # LinkedIn post preview
+        if result.linkedin_post:
+            st.markdown("<br>", unsafe_allow_html=True)
+            st.markdown('<div class="card"><div class="card-label">LinkedIn Post</div>', unsafe_allow_html=True)
+            st.markdown(
+                f'<pre style="white-space:pre-wrap; font-family:Inter,sans-serif; font-size:0.8rem; '
+                f'color:#a1a1aa; line-height:1.6; margin:0; background:transparent; border:none; padding:0">'
+                f'{result.linkedin_post}</pre>',
+                unsafe_allow_html=True,
+            )
+            st.markdown("</div>", unsafe_allow_html=True)
+
 
 # ── Generate handler ──────────────────────────────────────────────────────────
 if generate_btn and topic.strip():
     st.session_state["blog_ready"] = False
     prog = st.progress(0, text="Researching topic…")
     try:
-        with st.spinner("Writing with Llama 3.3 70B…"):
+        with st.spinner("Researching → Writing → Optimising for LinkedIn…"):
             result = generate_blog(topic.strip(), tone.lower(), length_key)
         prog.progress(70, text="Generating thumbnail…")
         img_path = generate_thumbnail(topic.strip(), _slug(result.topic))
@@ -514,7 +525,7 @@ if whatsapp_btn and st.session_state["blog_ready"]:
 if linkedin_btn and st.session_state["blog_ready"]:
     r = st.session_state["blog_result"]
     with st.spinner("Posting to LinkedIn…"):
-        ok = post_to_linkedin(r.topic, r.full_content, r.summary)
+        ok = post_to_linkedin(r.topic, r.full_content, r.summary, r.linkedin_post)
     if ok:
         st.success("Posted to LinkedIn.")
     else:

@@ -6,6 +6,7 @@ langgraph
 pydantic
 python-dotenv
 streamlit
+google-genai
 together
 twilio
 requests

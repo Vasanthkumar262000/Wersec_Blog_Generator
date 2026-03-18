@@ -30,7 +30,7 @@ def _format_linkedin_post(topic: str, full_content: str, summary: str) -> str:
     return post[:3000]
 
 
-def post_to_linkedin(topic: str, full_content: str, summary: str) -> bool:
+def post_to_linkedin(topic: str, full_content: str, summary: str, linkedin_post: str = "") -> bool:
     """
     Post blog to LinkedIn as a text update.
     Returns True on success, False on failure.
@@ -50,7 +50,7 @@ def post_to_linkedin(topic: str, full_content: str, summary: str) -> bool:
         return False
 
     try:
-        post_text = _format_linkedin_post(topic, full_content, summary)
+        post_text = linkedin_post if linkedin_post else _format_linkedin_post(topic, full_content, summary)
 
         headers = {
             "Authorization": f"Bearer {token}",

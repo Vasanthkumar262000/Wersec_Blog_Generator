@@ -17,6 +17,11 @@ class BlogPostResponse(BaseModel):
     full_content: str
     sources: list[str]
     tools_used: list[str]
+    linkedin_post: str = ""
+
+
+class _LinkedInPostContent(BaseModel):
+    post_text: str
 
 
 def _slug(text: str) -> str:
@@ -83,6 +88,41 @@ def _write_blog(topic: str, tone: str, word_count: str, research: str, llm: Chat
     )
 
 
+def _optimize_linkedin_post(topic: str, summary: str, full_content: str, llm: ChatGroq, retries: int = 3) -> str:
+    """Agent 3: Converts blog content into a high-visibility LinkedIn post for Wersec."""
+    optimizer = llm.with_structured_output(_LinkedInPostContent)
+    system = (
+        "You are a LinkedIn growth strategist for Wersec, a cybersecurity company. "
+        "Your job is to transform a blog post into a LinkedIn post that maximises reach, engagement, and business visibility. "
+        "Follow these rules strictly:\n"
+        "1. Start with a bold, curiosity-driven hook (1-2 lines). No generic openers.\n"
+        "2. Use short paragraphs (1-3 lines each) with a blank line between them — LinkedIn penalises walls of text.\n"
+        "3. Include 3-5 concrete insights or stats from the research (bullet points with → or ✦).\n"
+        "4. Add a 'Why this matters for your business' paragraph that subtly positions Wersec as the expert.\n"
+        "5. End with a strong call-to-action: invite comments, shares, or a DM to Wersec.\n"
+        "6. Add 8-12 targeted hashtags on the last line (mix broad + niche: #Cybersecurity #InfoSec #Wersec etc.).\n"
+        "7. Use 2-4 relevant emojis sparingly — don't overdo it.\n"
+        "8. Total length: 1200-2000 characters (LinkedIn sweet spot for reach).\n"
+        "Return only the final post text in the post_text field. No markdown formatting — plain text only."
+    )
+    human = f"Topic: {topic}\n\nSummary: {summary}\n\nFull blog content:\n{full_content}"
+
+    for attempt in range(retries):
+        try:
+            result = optimizer.invoke([SystemMessage(content=system), HumanMessage(content=human)])
+            return result.post_text
+        except Exception as e:
+            err = str(e)
+            if "403" in err or "429" in err or "rate" in err.lower():
+                wait = 10 * (attempt + 1)
+                print(f"Groq rate limit on LinkedIn optimizer (attempt {attempt+1}). Waiting {wait}s...")
+                time.sleep(wait)
+            else:
+                print(f"LinkedIn optimizer failed: {e}")
+                break
+    return ""
+
+
 def generate_blog(topic: str, tone: str = "professional", length: str = "medium") -> BlogPostResponse:
     length_map = {
         "short": "300-500 words",
@@ -94,6 +134,7 @@ def generate_blog(topic: str, tone: str = "professional", length: str = "medium"
 
     research = _research(topic, llm)
     result = _write_blog(topic, tone, word_count, research, llm)
+    result.linkedin_post = _optimize_linkedin_post(result.topic, result.summary, result.full_content, llm)
 
     pathlib.Path("outputs").mkdir(exist_ok=True)
     filepath = pathlib.Path("outputs") / f"{_slug(result.topic)}.md"
