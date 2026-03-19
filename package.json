@@ -1,0 +1,11 @@
+{
+  "name": "wersec-blog-generator",
+  "private": true,
+  "description": "Wersec Blog Generator — React frontend + FastAPI backend",
+  "scripts": {
+    "postinstall": "cd frontend && npm install",
+    "dev": "cd frontend && npm run dev",
+    "build": "cd frontend && npm run build",
+    "preview": "cd frontend && npm run preview"
+  }
+}

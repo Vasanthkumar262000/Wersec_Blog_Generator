@@ -28,14 +28,14 @@ def _save(data: bytes, path: str) -> str:
 def generate_thumbnail(topic: str, slug: str) -> str | None:
     """
     Generate a Wersec-branded cybersecurity thumbnail for LinkedIn.
-    Provider priority: Google Imagen 3 → Together AI → Hugging Face.
+    Provider priority: Google Imagen 4 → Together AI → Hugging Face.
     Returns local file path or None on failure.
     """
     pathlib.Path("outputs").mkdir(exist_ok=True)
     output_path = str(pathlib.Path("outputs") / f"{slug}_thumbnail.png")
     prompt = _build_prompt(topic)
 
-    # ── Option 1: Google Imagen 3 (primary) ──────────────────────────────────
+    # ── Option 1: Google Imagen 4 (primary) ──────────────────────────────────
     google_key = os.getenv("GOOGLE_API_KEY")
     if google_key:
         try:
@@ -44,7 +44,7 @@ def generate_thumbnail(topic: str, slug: str) -> str | None:
 
             client = genai.Client(api_key=google_key)
             response = client.models.generate_images(
-                model="imagen-3.0-generate-001",
+                model="imagen-4.0-generate-001",
                 prompt=prompt,
                 config=types.GenerateImagesConfig(
                     number_of_images=1,
@@ -54,10 +54,10 @@ def generate_thumbnail(topic: str, slug: str) -> str | None:
                 ),
             )
             image_bytes = response.generated_images[0].image.image_bytes
-            print("Thumbnail generated via Google Imagen 3.")
+            print("Thumbnail generated via Google Imagen 4.")
             return _save(image_bytes, output_path)
         except Exception as e:
-            print(f"Google Imagen 3 failed: {e}. Trying Together AI...")
+            print(f"Google Imagen 4 failed: {e}. Trying Together AI...")
 
     # ── Option 2: Together AI ─────────────────────────────────────────────────
     together_key = os.getenv("TOGETHER_API_KEY")
@@ -98,5 +98,5 @@ def generate_thumbnail(topic: str, slug: str) -> str | None:
         except Exception as e:
             print(f"HuggingFace {model} failed: {e}")
 
-    print("All thumbnail providers failed. Add GOOGLE_API_KEY to .env to enable Google Imagen 3.")
+    print("All thumbnail providers failed. Add GOOGLE_API_KEY to .env (Gemini API key) to enable Google Imagen 4.")
     return None

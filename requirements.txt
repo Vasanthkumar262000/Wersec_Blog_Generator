@@ -6,6 +6,8 @@ langgraph
 pydantic
 python-dotenv
 streamlit
+fastapi
+uvicorn[standard]
 google-genai
 together
 twilio
